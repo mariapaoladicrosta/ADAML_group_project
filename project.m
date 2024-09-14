@@ -24,3 +24,31 @@ end
 summary(data)
 
 %%
+
+% check for missing values
+missing = ismissing(data);
+
+disp(data( any(missing, 2), :));
+
+%%
+data.Properties.VariableNames = strrep(data.Properties.VariableNames, '_', '');
+
+% histograms of Variables
+figure;  
+for i = 2:size(data,2)
+    subplot(5, 5, i-1);  
+    histogram(data{:,i});
+    title(['Histogram of ', data.Properties.VariableNames{i}]);
+    ylabel('Frequency');
+end
+
+% boxplot
+figure; 
+for i = 2:size(data,2)
+    subplot(5, 5, i-1);  
+    boxplot(data{:,i});
+    title(['Boxplot of ', data.Properties.VariableNames{i}]);
+    ylabel(data.Properties.VariableNames{i})
+end
+
+%%

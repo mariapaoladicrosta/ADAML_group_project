@@ -3,7 +3,7 @@ close all;
 clc;
 
 % loading the file
-data = readtable('C:\Users\maryamata\OneDrive - KamIT 365\Liitteet\Advance machine learning\archive\MiningProcess_Flotation_Plant_Database.csv');
+data = readtable('MiningProcess_Flotation_Plant_Database.csv');
 
 %% Exploring data
 whos data
@@ -33,16 +33,10 @@ end
 missing = ismissing(data);
 disp(data(any(missing, 2), :));
 
-%% Clean up variable names
-data.Properties.VariableNames = strrep(data.Properties.VariableNames, '_', '');
-
-%% Display the corrected variable names
-disp('Corrected Variable Names:');
-disp(data.Properties.VariableNames');
 
 
-silicaFeedColumn = 'xSilicaFeed';
-silicaConcentrateColumn = 'xSilicaConcentrate'; 
+silicaFeedColumn = 'x_SilicaFeed';
+silicaConcentrateColumn = 'x_SilicaConcentrate'; 
 
 % Time Series Plot of % Silica Feed and % Silica Concentrate
 figure;
@@ -60,7 +54,7 @@ hold off;
 
 %% Correlation Heatmap
 % Calculate correlation matrix (excluding date)
-numeric_data = data{:, 2:end};  % Exclude the first column 
+numeric_data = data{:, 2:end};  
 corr_matrix = corr(numeric_data, 'Rows', 'complete');
 
 % Plot heatmap
@@ -79,8 +73,8 @@ end
 sgtitle('Box Plot of Variables'); 
 %% Histograms of Variables
 figure;
-for i = 2:size(data, 2)  % Skip the 'date' column
-    subplot(5, 5, i-1);  % Adjust the number of subplots based on the number of variables
+for i = 2:size(data, 2)  
+    subplot(5, 5, i-1);  
     histogram(data{:, i});
     title(['Histogram of ', data.Properties.VariableNames{i}]);
     ylabel('Frequency');

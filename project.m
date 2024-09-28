@@ -66,10 +66,7 @@ disp(data(any(missing, 2), :));
 
 
 %%
-silicaFeedColumn = 'x_SilicaFeed';
-silicaConcentrateColumn = 'x_SilicaConcentrate'; 
-
-% Time Series Plot of % Iron and Silica Feed and % Iron and Silica Concentrate
+% time Series Plot of % Iron and Silica Feed and % Iron and Silica Concentrate
 figure;
 hold on;
 
@@ -80,13 +77,57 @@ plot(data.date, data{:, 'xIronConcentrate'}, 'b', 'DisplayName', '% Iron Concent
 plot(data.date, data{:, 'xSilicaConcentrate'}, 'r', 'DisplayName', '% Silica Concentrate');
 
 xlabel('Time');
+ylabel('Iron and Silica Concentration (%)');
+title('Iron and Silica Content Trend Over Time');
+legend show;
+hold off;
+
+
+% cut off the period for which we have no observations: start date 30 March
+% let's start collect this 6 hours before because of Laggings (see next step)
+functioning = data(data.date >= datetime(2017, 3, 29, 18, 0, 0), :);
+
+%% Accounting for downtime periods
+period1 = functioning.date >= datetime(2017, 5, 9, 0, 0, 0) & ...
+          functioning.date <= datetime(2017, 6, 15, 23, 0, 0);
+
+
+figure;
+plot(functioning.date(period1), functioning{period1, 'xSilicaFeed'}, 'DisplayName', '% Silica Feed');
+xlabel('Date');
+ylabel('Silica Feed (%)');
+title('Silica Feed from May 9, 2017, to June 15, 2017');
+legend show;
+
+functioning = functioning(functioning.date < datetime(2017, 5, 13, 1, 0, 0) | functioning.date > datetime(2017, 6, 15, 0, 0, 0),:);
+
+period2 = functioning.date >= datetime(2017, 7, 23, 0, 0, 0) & ...
+          functioning.date <= datetime(2017, 8, 15, 23, 0, 0);
+
+figure;
+plot(functioning.date(period2), functioning{period2, 'xSilicaFeed'}, 'DisplayName', '% Silica Feed');
+xlabel('Date');
+ylabel('Silica Feed (%)');
+title('Silica Feed from July 23, 2017, to August 15, 2017');
+legend show;
+
+functioning = functioning(functioning.date < datetime(2017, 7, 24, 1, 0, 0) | functioning.date > datetime(2017, 8, 15, 0, 0, 0),:);
+
+figure;
+hold on;
+
+% Plot using the actual column names
+plot(functioning.date, functioning{:, 'xSilicaFeed'}, 'cyan', 'DisplayName', '% Silica Feed'); 
+plot(functioning.date, functioning{:, 'xIronFeed'}, 'magenta', 'DisplayName', '% Silica Feed'); 
+plot(functioning.date, functioning{:, 'xIronConcentrate'}, 'b', 'DisplayName', '% Iron Concentrate');
+plot(functioning.date, functioning{:, 'xSilicaConcentrate'}, 'r', 'DisplayName', '% Silica Concentrate');
+
+xlabel('Time');
 ylabel('Silica Concentration (%)');
 title('Silica Content Trend Over Time');
 legend show;
 hold off;
 
-% select functioning period
-functioning = data(data.date >= datetime(2017, 3, 29, 21, 0, 0), :);
 
 %% Correlation Heatmap
 % Calculate correlation matrix (excluding date)
@@ -148,52 +189,98 @@ for i = 2:width(functioning)
     resampled.(functioning.Properties.VariableNames{i}) = resampled_values;
 end
 
-%% Lagged Variables
-lagged_data = resampled;
 
-% loop through each variable
-for i = 2:width(resampled)
 
-    % lagged variables for t-1, t-2, t-3
-    lagged_data.(['Lag1_', resampled.Properties.VariableNames{i}]) = lagmatrix(resampled{:,i}, 1);  % t-1 lag
-    lagged_data.(['Lag2_', resampled.Properties.VariableNames{i}]) = lagmatrix(resampled{:,i}, 2);  % t-2 lag
-    lagged_data.(['Lag3_', resampled.Properties.VariableNames{i}]) = lagmatrix(resampled{:,i}, 3);  % t-3 lag
+%% Lagged variables  (6 lags)
+% time periods for continuous segments
+segments = {...
+    resampled.date >= datetime(2017, 3, 30, 0, 0, 0) & resampled.date <= datetime(2017, 5, 13, 0, 0, 0), ...
+    resampled.date >= datetime(2017, 6, 15, 1, 0, 0) & resampled.date <= datetime(2017, 7, 24, 0, 0, 0), ...
+    resampled.date >= datetime(2017, 8, 15, 1, 0, 0)}; %
+
+lagged_data = [];
+
+% loop over each segment to apply lagging
+for i = 1:length(segments)
+    % extract the continuous segment
+    segment_data = resampled(segments{i}, :);
+    
+    % table to store lagged data for this segment
+    segment_lagged_data = segment_data;
+    
+    % lag variables t-i for i from 1 to 6, except for xSilicaConcentrate 
+    for j = 2:size(segment_data, 2)  % exclude the date column 
+        if ~strcmp(segment_data.Properties.VariableNames{j}, 'xSilicaConcentrate')
+            
+            for lag = 1:6
+                segment_lagged_data.(['Lag', num2str(lag), '_', segment_data.Properties.VariableNames{j}]) = ...
+                    lagmatrix(segment_data{:, j}, lag);
+            end
+        end
+    end
+    
+    % lag xSilicaConcentrate at t+1 (future lag)
+    segment_lagged_data.xSilicaConcentrate_lead1 = lagmatrix(segment_data{:, 'xSilicaConcentrate'}, -1);
+    
+    lagged_data = [lagged_data; segment_lagged_data];
 end
 
-% eliminate the first 3 rows, which contain NaN values 
-lagged_data = lagged_data(4:end, :);
+% remove rows with missing values introduced by the lags
+lagged_data = lagged_data(~any(ismissing(lagged_data), 2), :);
+
+disp('Lagged dataset:');
+head(lagged_data);
 
 % Heatmap
-original_vars = data.Properties.VariableNames(2:end)
+y_vars = {'xSilicaConcentrate_lead1'};
+excluded_variables = [resampled.Properties.VariableNames, 'xSilicaConcentrate_lead1'];
+x_vars = lagged_data.Properties.VariableNames(~ismember(lagged_data.Properties.VariableNames, excluded_variables));
 
-% Create an ordered list of x-axis variables: each variable followed by its lags
-x_vars_ordered = {};
-for i = 1:length(original_vars)
-    x_vars_ordered = [x_vars_ordered, original_vars{i}, ...
-                      ['Lag1_', original_vars{i}], ...
-                      ['Lag2_', original_vars{i}], ...
-                      ['Lag3_', original_vars{i}]];
-end
+% extract numeric data
+x_numeric_data = lagged_data{:, x_vars};  % All independent variables (numeric)
+y_numeric_data = lagged_data{:, y_vars};  % Silica Concentrate and its future lags (numeric)
 
-% define y-axis variables (Silica Concentrate and its lags)
-y_vars = {'xSilicaConcentrate', 'Lag1_xSilicaConcentrate', 'Lag2_xSilicaConcentrate', 'Lag3_xSilicaConcentrate'};
-
-% remove y-axis variables from x-axis variables (so they only appear on the y-axis)
-x_vars = setdiff(x_vars_ordered, y_vars, 'stable');  % 'stable' keeps the original order
-
-% extract numeric data for the x-axis (variables + lags) and y-axis (% Silica Concentrate + lags)
-x_numeric_data = lagged_data{:, x_vars};  % All other variables
-y_numeric_data = lagged_data{:, y_vars};  % Silica Concentrate and its lags
-
-% correlation matrix between y-axis and x-axis variables
 corr_matrix = corr(y_numeric_data, x_numeric_data, 'Rows', 'complete');
 
-% plot heatmap
+% Plot heatmap
 figure;
 h = heatmap(x_vars, y_vars, corr_matrix);
 h.Colormap = jet;
 h.ColorbarVisible = 'on';
-title('Correlation Heatmap: % Silica Concentrate and Lags vs Other Variables (Grouped with Lags)');
+title('Correlation Heatmap: Future % Silica Concentrate vs Other Variables (Grouped with Lags)');
+
+%% Filter the dataset based on highest correlation
+selected_data = lagged_data(:, 1);
+
+% dependent variable
+selected_data.xSilicaConcentrate_lead1 = lagged_data.xSilicaConcentrate_lead1;
+
+% indices of the lagged variables (from 25th to 156th columns)
+lag_start_idx = 25;
+lag_end_idx = 156;
+
+num_variables = 22;
+lags_per_variable = 6;
+
+% loop over each group of 6 lags and select the lag with the highest correlation
+for var_idx = 1:num_variables
+    
+    group_start_idx = (var_idx - 1) * lags_per_variable + 1;  
+    group_end_idx = group_start_idx + lags_per_variable - 1; 
+    
+    % index of the lag with the highest correlation for the current group in the correlation matrix
+    [~, max_corr_idx] = max(corr_matrix(group_start_idx:group_end_idx));
+    
+    % index of the selected lag in the original dataset
+    selected_column_idx = lag_start_idx + (group_start_idx - 1) + (max_corr_idx - 1);
+    
+    % add the selected lag to the filtered data 
+    selected_data = [selected_data, lagged_data(:, selected_column_idx)];
+end
+
+disp('Filtered dataset with highest correlated lags:');
+head(selected_data);
+
 
 %% Data Splitting 
 % ratios
@@ -201,14 +288,14 @@ calibration_ratio = 0.6;
 validation_ratio = 0.2;
 test_ratio = 0.2;
 
-num_obs = height(lagged_data);
+num_obs = height(selected_data);
 calibration_idx = 1:round(calibration_ratio * num_obs);
 validation_idx = (round(calibration_ratio * num_obs) + 1):round((calibration_ratio + validation_ratio) * num_obs);
 test_idx = (round((calibration_ratio + validation_ratio) * num_obs) + 1):num_obs;
 
-calibration_data = lagged_data(calibration_idx, :);
-validation_data = lagged_data(validation_idx, :);
-test_data = lagged_data(test_idx, :);
+calibration_data = selected_data(calibration_idx, :);
+validation_data = selected_data(validation_idx, :);
+test_data = selected_data(test_idx, :);
 
 %% Scaling
 calibration_numeric = calibration_data{:, 2:end};
@@ -233,7 +320,7 @@ figure;
 for i = 2:24  
     subplot(5, 5, i-1);
     histogram(calibration_data_scaled{:, i});
-    %plot(calibration_data_scaled.date,calibration_data_scaled{:, i});
+    % plot(calibration_data_scaled.date,calibration_data_scaled{:, i});
     title(['Histogram of ', calibration_data_scaled.Properties.VariableNames{i}]);
     ylabel('Frequency');
 end

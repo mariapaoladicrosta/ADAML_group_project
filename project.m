@@ -72,7 +72,7 @@ hold on;
 
 % Plot using the actual column names
 plot(data.date, data{:, 'xSilicaFeed'}, 'cyan', 'DisplayName', '% Silica Feed'); 
-plot(data.date, data{:, 'xIronFeed'}, 'magenta', 'DisplayName', '% Silica Feed'); 
+plot(data.date, data{:, 'xIronFeed'}, 'magenta', 'DisplayName', '% Iron Feed'); 
 plot(data.date, data{:, 'xIronConcentrate'}, 'b', 'DisplayName', '% Iron Concentrate');
 plot(data.date, data{:, 'xSilicaConcentrate'}, 'r', 'DisplayName', '% Silica Concentrate');
 
@@ -210,13 +210,11 @@ for i = 1:length(segments)
     
     % lag variables t-i for i from 1 to 6, except for xSilicaConcentrate 
     for j = 2:size(segment_data, 2)  % exclude the date column 
-        if ~strcmp(segment_data.Properties.VariableNames{j}, 'xSilicaConcentrate')
-            
-            for lag = 1:6
+        for lag = 1:6
                 segment_lagged_data.(['Lag', num2str(lag), '_', segment_data.Properties.VariableNames{j}]) = ...
                     lagmatrix(segment_data{:, j}, lag);
-            end
         end
+
     end
     
     % lag xSilicaConcentrate at t+1 (future lag)
@@ -259,7 +257,7 @@ selected_data.xSilicaConcentrate_lead1 = lagged_data.xSilicaConcentrate_lead1;
 lag_start_idx = 25;
 lag_end_idx = 156;
 
-num_variables = 22;
+num_variables = 23;
 lags_per_variable = 6;
 
 % loop over each group of 6 lags and select the lag with the highest correlation
@@ -269,7 +267,7 @@ for var_idx = 1:num_variables
     group_end_idx = group_start_idx + lags_per_variable - 1; 
     
     % index of the lag with the highest correlation for the current group in the correlation matrix
-    [~, max_corr_idx] = max(corr_matrix(group_start_idx:group_end_idx));
+    [~, max_corr_idx] = max(abs(corr_matrix(group_start_idx:group_end_idx)));
     
     % index of the selected lag in the original dataset
     selected_column_idx = lag_start_idx + (group_start_idx - 1) + (max_corr_idx - 1);

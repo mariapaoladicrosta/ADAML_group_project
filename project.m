@@ -280,48 +280,46 @@ disp('Filtered dataset with highest correlated lags:');
 head(selected_data);
 
 
-%% Data Splitting 
-% ratios
-calibration_ratio = 0.6;
-validation_ratio = 0.2;
-test_ratio = 0.2;
+%% Data Splitting & Scaling
 
+% split into Calibration (training + validation) and Testing (model evaluation)
 num_obs = height(selected_data);
-calibration_idx = 1:round(calibration_ratio * num_obs);
-validation_idx = (round(calibration_ratio * num_obs) + 1):round((calibration_ratio + validation_ratio) * num_obs);
-test_idx = (round((calibration_ratio + validation_ratio) * num_obs) + 1):num_obs;
+partition = tspartition(num_obs ,"Holdout",0.2);
 
-calibration_data = selected_data(calibration_idx, :);
-validation_data = selected_data(validation_idx, :);
-test_data = selected_data(test_idx, :);
+Calibration = selected_data(training(partition), :);
+Test = selected_data(test(partition), :);
 
-%% Scaling
-calibration_numeric = calibration_data{:, 2:end};
+X_Cal = table2array(Calibration(:,3:end));
+y_Cal = table2array(Calibration(:,2));
 
-% mean and standard deviation of the calibration set
-calibration_mean = mean(calibration_numeric);
-calibration_std = std(calibration_numeric);
+X_test = table2array(Test(:,3:end));
+y_test = table2array(Test(:,2));
 
-% scale calibration data using its own mean and std
-calibration_data_scaled = calibration_data;
-calibration_data_scaled{:, 2:end} = (calibration_numeric - calibration_mean) ./ calibration_std;
+% standardize X calibration data
+X_Cal_scaled = (X_Cal - mean(X_Cal))./ std(X_Cal);
+% center y calibration data
+y_Cal_centered  = y_Cal - mean(y_Cal);
 
-% scale validation and test data using the calibration mean and std
-validation_data_scaled = validation_data;
-validation_data_scaled{:, 2:end} = (validation_data{:, 2:end} - calibration_mean) ./ calibration_std;
-
-test_data_scaled = test_data;
-test_data_scaled{:, 2:end} = (test_data{:, 2:end} - calibration_mean) ./ calibration_std;
+% standardize X test data with training mean and std
+X_test_scaled = (X_test - mean(X_Cal))./ std(X_Cal);
+% center y test data
+y_test_centered  = y_test - mean(y_Cal);
 
 % visualization
 figure;
-for i = 2:24  
-    subplot(5, 5, i-1);
-    histogram(calibration_data_scaled{:, i});
-    % plot(calibration_data_scaled.date,calibration_data_scaled{:, i});
-    title(['Histogram of ', calibration_data_scaled.Properties.VariableNames{i}]);
+for i = 2:23 
+    subplot(5, 5, i-1); 
+    histogram(X_Cal_scaled(:, i));
+    title(['Histogram of ', Calibration.Properties.VariableNames{i+2}]);
     ylabel('Frequency');
 end
-sgtitle('Histograms of Variables'); 
+sgtitle('Histograms of Variables');  
+
+%% Calibrate PLS with Sliding Window
+
+
+
+
+
 
 

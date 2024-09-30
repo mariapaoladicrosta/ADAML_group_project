@@ -315,7 +315,73 @@ for i = 2:23
 end
 sgtitle('Histograms of Variables');  
 
+
 %% Calibrate PLS with Sliding Window
+n = height(X_Cal);
+windows = 5;
+cv = tspartition(n, "SlidingWindow", windows, TrainSize = round(0.8 * n));
+
+
+for i = 1:cv.NumTestSets
+
+    trainIdx = training(cv, i);
+    valIdx  = test(cv, i);
+
+    X_train = X_Cal(trainIdx, :);
+    y_train = y_Cal(trainIdx, :);
+    X_val = X_Cal(valIdx, :);
+    y_val = y_Cal(valIdx, :);
+
+    % center & scale
+    mu = mean(X_train); sigma = std(X_train);
+    XTrain = (X_train - mu)./ sigma;
+    XVal = (X_val - mu)./ sigma;
+    yTrain = y_train - mean(y_train); 
+    yVal = y_val - mean(y_train);
+    
+
+    TSS = sum((yTrain - mean(yTrain)).^2);
+
+    [rows, ~] = size(XVal);
+
+    for j = 1:10
+        [XLoadings, yLoadings, XScore, yScore, betaPLS, PLSVar] = plsregress(XTrain, yTrain, j);  % Perform PLS with j latent variables
+        yfitPLS = [ones(rows, 1), XVal] * betaPLS;  % Predict on the validation set
+        yfitPLS_train= [ones(height(XTrain), 1), XTrain] * betaPLS;
+
+
+        % performance metrics for PLS
+        RMSEPLS(i,j) = sqrt(mean((yfitPLS - yVal).^2));  % Root Mean Squared Error (RMSE)
+
+        PRESSPLS(i,j) = sum((yfitPLS - yVal).^2);  % Prediction error sum of squares (PRESS)
+        Q2PLS(i,j) = 1 - (PRESSPLS(i,j) / TSS);  % Q², predictive ability
+
+        
+    end
+ end
+
+RMSE_cv = mean(RMSEPLS)
+Q2_cv = mean(Q2PLS)
+
+%%
+figure;
+hold on
+b = plot(1:10,100*cumsum(PLSVar(1,:))/sum(PLSVar(1,:)), 'r-o'); %variance in X
+c = plot(1:10,100*cumsum(PLSVar(2,:))/sum(PLSVar(2,:)), 'k-o'); %variance in Y
+xlabel('Number of LVs');
+ylabel('Explained Variance');
+legend([b,c], {'PLS: Explained Variance in X', 'PLS: Explained Variance in Y'});
+
+
+figure;
+plot(Q2_cv, 'b-o');
+xlabel('Number of LVs');
+ylabel("Q^2_{CV}")
+
+figure;
+plot(RMSE_cv, 'b-o');
+xlabel('Number of LVs');
+ylabel("RMSE_{CV}");
 
 
 

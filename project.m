@@ -317,73 +317,451 @@ sgtitle('Histograms of Variables');
 
 
 %% Calibrate PLS with Sliding Window
-n = height(X_Cal);
-windows = 5;
-cv = tspartition(n, "SlidingWindow", windows, TrainSize = round(0.8 * n));
+
+for m = [12, 24]  % number of samples in a batch
+
+    nseg = length(X_Cal(:,1)) - (m + 1);
+
+    for j = 1:10 % number of latent variables 
+
+        for i = 1:nseg % number of segments of m samples
+
+            % Center and scale the X-matrices
+
+             % Calibration
+            [XTrain, mu, sig]    = zscore(X_Cal(i:(i+m),:));
+            
+            % Validation
+            XVal                 = normalize(X_Cal((i+m+1),:), 'Center', mu, 'scale', sig);
 
 
-for i = 1:cv.NumTestSets
+            % Center the Y-matrices
 
-    trainIdx = training(cv, i);
-    valIdx  = test(cv, i);
+            % Calibration
+            yTrain       = y_Cal(i:(i+m),:) - mean(y_Cal(i:(i+m),:));
+            
+            % Validation
+            yVal      = y_Cal((i+m+1),:) - mean(y_Cal(i:(i+m),:));
+            
 
-    X_train = X_Cal(trainIdx, :);
-    y_train = y_Cal(trainIdx, :);
-    X_val = X_Cal(valIdx, :);
-    y_val = y_Cal(valIdx, :);
+            % Computing PLS model
+            [~, ~, ~, ~, model(m).ncomp(j).segment(i).B, ...
+                model(m).ncomp(j).segment(i).MSE, ...
+                model(m).ncomp(j).segment(i).stats] = plsregress(XTrain, yTrain, j);
+            
+           
 
-    % center & scale
-    mu = mean(X_train); sigma = std(X_train);
-    XTrain = (X_train - mu)./ sigma;
-    XVal = (X_val - mu)./ sigma;
-    yTrain = y_train - mean(y_train); 
-    yVal = y_val - mean(y_train);
-    
+            % Calculate R2
+            yfitPLS_train = [ones(height(XTrain), 1), XTrain] * model(m).ncomp(j).segment(i).B;
+            TSSRes  = sum((yTrain - mean(yTrain)).^2);
+            RSSRes  = sum((yTrain - yfitPLS_train).^2);
+            model(m).ncomp(j).R2(i) = 1 - RSSRes / TSSRes;
 
-    TSS = sum((yTrain - mean(yTrain)).^2);
+            % calculate Q2
+            yfitPLS_val = [ones(height(XVal), 1), XVal] * model(m).ncomp(j).segment(i).B; 
+            PRESS = sum((yVal - yfitPLS_val).^2);
+            model(m).ncomp(j).Q2(i) = 1 - PRESS / TSSRes;
 
-    [rows, ~] = size(XVal);
+            % RMSE
+            model(m).ncomp(j).MSE(i) = sqrt(mean((yfitPLS_val - yVal).^2));
 
-    for j = 1:10
-        [XLoadings, yLoadings, XScore, yScore, betaPLS, PLSVar] = plsregress(XTrain, yTrain, j);  % Perform PLS with j latent variables
-        yfitPLS = [ones(rows, 1), XVal] * betaPLS;  % Predict on the validation set
-        yfitPLS_train= [ones(height(XTrain), 1), XTrain] * betaPLS;
+            % Storing for later
+            model(m).ncomp(j).B(i,:) = model(m).ncomp(j).segment(i).B;
+            
+        end
+        model(m).ncomp(j).Q2(isnan(model(m).ncomp(j).Q2))   = 0;
+        model(m).ncomp(j).Q2(find(model(m).ncomp(j).Q2==-Inf))  = 0;
+        model(m).ncomp(j).meanR2 = nanmean(model(m).ncomp(j).R2');
+        model(m).ncomp(j).meanQ2 = nanmean(model(m).ncomp(j).Q2');
 
-
-        % performance metrics for PLS
-        RMSEPLS(i,j) = sqrt(mean((yfitPLS - yVal).^2));  % Root Mean Squared Error (RMSE)
-
-        PRESSPLS(i,j) = sum((yfitPLS - yVal).^2);  % Prediction error sum of squares (PRESS)
-        Q2PLS(i,j) = 1 - (PRESSPLS(i,j) / TSS);  % Q², predictive ability
-
-        
+        model(m).ncomp(j).MSE(isnan(model(m).ncomp(j).MSE))   = 0;
+        model(m).ncomp(j).MSE(find(model(m).ncomp(j).MSE ==-Inf))  = 0;
+        model(m).ncomp(j).meanMSE = nanmean(model(m).ncomp(j).MSE');
     end
+end
+
+
+ m = [12, 24];
+
+ for i = 1:length(m)
+     for j = 1:10
+         R2(i,j) = model(m(i)).ncomp(j).meanR2;
+         Q2(i,j) = model(m(i)).ncomp(j).meanQ2;
+         MSE(i,j) = model(m(i)).ncomp(j).meanMSE;
+     end
  end
 
-RMSE_cv = mean(RMSEPLS)
-Q2_cv = mean(Q2PLS)
 
-%%
+ figure;
+ subplot(1,2,1)
+ yvalues = {'12','24'};
+ xvalues = {'1', '2', '3', '4', '5', '6', '7', '8','9','10'};
+ heatmap(xvalues, yvalues, R2);
+ ylabel("Observations in window frame");
+ xlabel("No. components in the model");
+ title("R2 values")
+
+ subplot(1,2,2)
+ yvalues = {'12','24'};
+ xvalues = {'1', '2', '3', '4', '5', '6', '7', '8','9','10'};
+ heatmap(xvalues, yvalues, Q2);
+ ylabel("Observations in window frame");
+ xlabel("No. components in the model");
+ title("Q2 values");
+
+ figure;
+ yvalues = {'12','24'};
+ xvalues = {'1', '2', '3', '4', '5', '6', '7', '8','9','10'};
+ heatmap(xvalues, yvalues, MSE);
+ ylabel("Observations in window frame");
+ xlabel("No. components in the model");
+ title("MSE values");
+
+ %% Check NaN in betas
+ 
+ for m = [12,24]
+    for j = 1:10
+        if any(isnan(model(m).ncomp(j).B))
+            fprintf('NaN values found in betas window (%d) LV(%d)\n', m, j)
+        end
+    end
+end
+
+ %% Delete rows with more than 20 equal consecutive values
+delete_rows = false(height(selected_data), 1);
+consecutive_threshold = 20;
+
+for var_idx = 3:25
+
+    variable_data = selected_data{:, var_idx};
+    
+    start_idx = 1;
+    while start_idx <= length(variable_data)
+        end_idx = start_idx;
+        
+        % check consecutive values
+        while end_idx < length(variable_data) && variable_data(end_idx) == variable_data(end_idx + 1)
+            end_idx = end_idx + 1;
+        end
+        
+        % check if the consecutive period meets the threshold
+        consecutive_hours = end_idx - start_idx + 1;
+        if consecutive_hours > consecutive_threshold
+            % mark the rows for deletion within this constant period
+            delete_rows(start_idx:end_idx) = true;
+        end
+
+        start_idx = end_idx + 1;
+    end
+end
+
+% delete the marked rows from 'selected data'
+selected_data_filtered = selected_data(~delete_rows, :);
+
+fprintf('Deleted %d rows with constant periods over the threshold.\n', sum(delete_rows));
+
+%% new data splitting
+clear num_obs partition Calibration Test X_Cal y_Cal X_test y_test X_Cal_scaled y_Cal_centered
+
+num_obs = height(selected_data_filtered);
+partition = tspartition(num_obs ,"Holdout",0.2);
+
+Calibration = selected_data_filtered(training(partition), :);
+Test = selected_data_filtered(test(partition), :);
+
+
+X_Cal = table2array(Calibration(:,3:end));
+y_Cal = table2array(Calibration(:,2));
+
+X_test = table2array(Test(:,3:end));
+y_test = table2array(Test(:,2));
+
+% standardize X calibration data
+X_Cal_scaled = (X_Cal - mean(X_Cal))./ std(X_Cal);
+% center y calibration data
+y_Cal_centered  = y_Cal - mean(y_Cal);
+
+% standardize X test data with training mean and std
+X_test_scaled = (X_test - mean(X_Cal))./ std(X_Cal);
+% center y test data
+y_test_centered  = y_test - mean(y_Cal);
+
+%% Repeat Cross-Validation
+c lear model
+
+for m = [22, 24, 28, 32, 35]  % number of samples in a batch
+
+    nseg = length(X_Cal(:,1)) - (m + 2);
+
+    for j = 1:10 % number of latent variables 
+
+        for i = 1:nseg % number of segments of m samples
+
+            % Center and scale the X-matrices
+
+             % Calibration
+            [XTrain, mu, sig]    = zscore(X_Cal(i:(i+m),:));
+            
+            % Validation
+            XVal                 = normalize(X_Cal((i+m+1):(i+m+2),:), 'Center', mu, 'scale', sig);
+
+
+            % Center the Y-matrices
+
+            % Calibration
+            yTrain       = y_Cal(i:(i+m),:) - mean(y_Cal(i:(i+m),:));
+            
+            % Validation
+            yVal      = y_Cal((i+m+1):(i+m+2),:) - mean(y_Cal(i:(i+m),:));
+            
+
+            % Computing PLS model
+            [~, ~, ~, ~, model(m).ncomp(j).segment(i).B, ...
+                model(m).ncomp(j).segment(i).MSE, ...
+                model(m).ncomp(j).segment(i).stats] = plsregress(XTrain, yTrain, j);
+
+
+            % Calculate R2
+            yfitPLS_train = [ones(height(XTrain), 1), XTrain] * model(m).ncomp(j).segment(i).B;
+            TSSRes  = sum((yTrain - mean(yTrain)).^2);
+            RSSRes  = sum((yTrain - yfitPLS_train).^2);
+            model(m).ncomp(j).R2(i) = 1 - RSSRes / TSSRes;
+
+            % calculate Q2
+            yfitPLS_val = [ones(height(XVal), 1), XVal] * model(m).ncomp(j).segment(i).B;  % Predict on the validation set
+            PRESS = sum((yVal - yfitPLS_val).^2);
+            model(m).ncomp(j).Q2(i) = 1 - PRESS / TSSRes;
+
+            % Storing for later
+            model(m).ncomp(j).B(i,:) = model(m).ncomp(j).segment(i).B';
+
+            %model(m).ncomp(j).mse_values(i) = model(m).ncomp(j).segment(i).MSE;
+            
+        end
+        model(m).ncomp(j).Q2(isnan(model(m).ncomp(j).Q2))   = 0;
+        model(m).ncomp(j).Q2(find(model(m).ncomp(j).Q2==-Inf))  = 0;
+        model(m).ncomp(j).meanR2 = nanmean(model(m).ncomp(j).R2');
+        model(m).ncomp(j).meanQ2 = nanmean(model(m).ncomp(j).Q2'); 
+        %model(m).ncomp(j).meanMSE = mean(mse_values);
+        
+    end
+end
+
+
+m = [22, 24, 28, 32, 35];
+
+ for i = 1:length(m)
+     for j = 1:10
+         R2(i,j) = model(m(i)).ncomp(j).meanR2;
+         Q2(i,j) = model(m(i)).ncomp(j).meanQ2;
+     end
+ end
+
+ figure;
+ subplot(1,2,1)
+ yvalues = {'22','24','28','32','35'};
+ xvalues = {'1', '2', '3', '4', '5', '6', '7', '8','9','10'};
+ heatmap(xvalues, yvalues, R2);
+ ylabel("Observations in window frame");
+ xlabel("No. components in the model");
+ title("R2 values")
+
+ subplot(1,2,2)
+ yvalues = {'22','24','28','32','35'};
+ xvalues = {'1', '2', '3', '4', '5', '6', '7', '8','9','10'};
+ heatmap(xvalues, yvalues, Q2);
+ ylabel("Observations in window frame");
+ xlabel("No. components in the model");
+ title("Q2 values");
+
+%% Plot Q2 over time
+
+for m = [22, 24, 28, 32, 35]
+    figure;
+    hold on;
+    for j = 1:10
+        % extract Q2 values for the current m and j
+        Q2_values = model(m).ncomp(j).Q2;
+        
+        % plot Q2 over segments for this latent variable
+        plot(Q2_values, 'DisplayName', ['LV ' num2str(j)]);
+    end
+    title(['Q2 over segments for m = ' num2str(m)]);
+    xlabel('Segment');
+    ylabel('Q2');
+    legend('show');
+    grid on;
+    hold off;
+end
+
+%% Outliers Removal 
+X = selected_data_filtered{:, 3:25};
+
+[coeff, score, latent, ~, explained] = pca(X, 'Centered', true);
+
+num_components = find((cumsum(explained)) / sum(explained) >= 0.95, 1);
+
+T2_reduced = sum((score(:, 1:num_components) ./ sqrt(latent(1:num_components)')) .^ 2, 2);
+
+mean_T2 = mean(T2_reduced);  
+std_T2 = std(T2_reduced); 
+control_limit_T2_2std = mean_T2 + 2 * std_T2;  
+control_limit_T2_3std = mean_T2 + 3 * std_T2;
+
+% identify outliers that exceed the 3 standard deviations control limit
+outliers_T2 = find(T2_reduced > control_limit_T2_3std);
+
 figure;
-hold on
-b = plot(1:10,100*cumsum(PLSVar(1,:))/sum(PLSVar(1,:)), 'r-o'); %variance in X
-c = plot(1:10,100*cumsum(PLSVar(2,:))/sum(PLSVar(2,:)), 'k-o'); %variance in Y
-xlabel('Number of LVs');
-ylabel('Explained Variance');
-legend([b,c], {'PLS: Explained Variance in X', 'PLS: Explained Variance in Y'});
+plot(T2_reduced, '-o');  
+hold on;
+yline(control_limit_T2_2std, '--r', '2 Std Dev');
+yline(control_limit_T2_3std, '--g', '3 Std Dev');
+plot(outliers_T2, T2_reduced(outliers_T2), 'ro'); % Highlight outliers
+title('T² Control Chart');
+xlabel('Sample');
+ylabel('T²');
+legend('T²', '2 Std Dev', '3 Std Dev', 'Outliers');
+grid on;
+hold off;
 
+
+selected_data_filtered_no_outliers = selected_data_filtered;
+selected_data_filtered_no_outliers(outliers_T2, :) = [];
+
+%% New data splitting
+clear num_obs partition Calibration Test X_Cal y_Cal X_test y_test X_Cal_scaled y_Cal_centered
+
+num_obs = height(selected_data_filtered);
+partition = tspartition(num_obs ,"Holdout",0.2);
+
+Calibration = selected_data_filtered(training(partition), :);
+Test = selected_data_filtered(test(partition), :);
+
+
+X_Cal = table2array(Calibration(:,3:end));
+y_Cal = table2array(Calibration(:,2));
+
+X_test = table2array(Test(:,3:end));
+y_test = table2array(Test(:,2));
+
+% standardize X calibration data
+X_Cal_scaled = (X_Cal - mean(X_Cal))./ std(X_Cal);
+% center y calibration data
+y_Cal_centered  = y_Cal - mean(y_Cal);
+
+% standardize X test data with training mean and std
+X_test_scaled = (X_test - mean(X_Cal))./ std(X_Cal);
+% center y test data
+y_test_centered  = y_test - mean(y_Cal);
+
+%% Repeat Cross-Validation
+ clear model
+
+for m = [22, 24, 28, 32, 35]  % number of samples in a batch
+
+    nseg = length(X_Cal(:,1)) - (m + 2);
+
+    for j = 1:10 % number of latent variables 
+
+        for i = 1:nseg % number of segments of m samples
+
+            % Center and scale the X-matrices
+
+             % Calibration
+            [XTrain, mu, sig]    = zscore(X_Cal(i:(i+m),:));
+            
+            % Validation
+            XVal                 = normalize(X_Cal((i+m+1):(i+m+2),:), 'Center', mu, 'scale', sig);
+
+
+            % Center the Y-matrices
+
+            % Calibration
+            yTrain       = y_Cal(i:(i+m),:) - mean(y_Cal(i:(i+m),:));
+            
+            % Validation
+            yVal      = y_Cal((i+m+1):(i+m+2),:) - mean(y_Cal(i:(i+m),:));
+            
+
+            % Computing PLS model
+            [~, ~, ~, ~, model(m).ncomp(j).segment(i).B, ...
+                model(m).ncomp(j).segment(i).MSE, ...
+                model(m).ncomp(j).segment(i).stats] = plsregress(XTrain, yTrain, j);
+
+
+            % Calculate R2
+            yfitPLS_train = [ones(height(XTrain), 1), XTrain] * model(m).ncomp(j).segment(i).B;
+            TSSRes  = sum((yTrain - mean(yTrain)).^2);
+            RSSRes  = sum((yTrain - yfitPLS_train).^2);
+            model(m).ncomp(j).R2(i) = 1 - RSSRes / TSSRes;
+
+            % calculate Q2
+            yfitPLS_val = [ones(height(XVal), 1), XVal] * model(m).ncomp(j).segment(i).B;  % Predict on the validation set
+            PRESS = sum((yVal - yfitPLS_val).^2);
+            model(m).ncomp(j).Q2(i) = 1 - PRESS / TSSRes;
+
+            % Storing for later
+            model(m).ncomp(j).B(i,:) = model(m).ncomp(j).segment(i).B';
+
+            %model(m).ncomp(j).mse_values(i) = model(m).ncomp(j).segment(i).MSE;
+            
+        end
+        model(m).ncomp(j).Q2(isnan(model(m).ncomp(j).Q2))   = 0;
+        model(m).ncomp(j).Q2(find(model(m).ncomp(j).Q2==-Inf))  = 0;
+        model(m).ncomp(j).meanR2 = nanmean(model(m).ncomp(j).R2');
+        model(m).ncomp(j).meanQ2 = nanmean(model(m).ncomp(j).Q2'); 
+        %model(m).ncomp(j).meanMSE = mean(mse_values);
+        
+    end
+end
+
+
+m = [22, 24, 28, 32, 35];
+
+ for i = 1:length(m)
+     for j = 1:10
+         R2(i,j) = model(m(i)).ncomp(j).meanR2;
+         Q2(i,j) = model(m(i)).ncomp(j).meanQ2;
+     end
+ end
+
+ figure;
+ subplot(1,2,1)
+ yvalues = {'22','24','28','32','35'};
+ xvalues = {'1', '2', '3', '4', '5', '6', '7', '8','9','10'};
+ heatmap(xvalues, yvalues, R2);
+ ylabel("Observations in window frame");
+ xlabel("No. components in the model");
+ title("R2 values")
+
+ subplot(1,2,2)
+ yvalues = {'22','24','28','32','35'};
+ xvalues = {'1', '2', '3', '4', '5', '6', '7', '8','9','10'};
+ heatmap(xvalues, yvalues, Q2);
+ ylabel("Observations in window frame");
+ xlabel("No. components in the model");
+ title("Q2 values");
+
+%% Betas Barplot
+
+varImp = nanmean(abs(model(28).ncomp(5).B));
+
+X_varNames = selected_data.Properties.VariableNames(3:end);
 
 figure;
-plot(Q2_cv, 'b-o');
-xlabel('Number of LVs');
-ylabel("Q^2_{CV}")
-
-figure;
-plot(RMSE_cv, 'b-o');
-xlabel('Number of LVs');
-ylabel("RMSE_{CV}");
+bar(varImp(2:end));
+xtickangle(45);
+xticklabels(gca,X_varNames);
 
 
+
+%% Test 
+[XLoadings, yLoadings, XScore, yScore, betaPLS, PLSVar] = plsregress(X_Cal_scaled, y_Cal_centered, 3);
+yfitPLS = [ones(height(X_test_scaled), 1), X_test_scaled]*betaPLS;
+
+TSS = sum((y_test_centered - mean(y_test_centered)).^2);
+RSSPLS = sum((y_test_centered - yfitPLS).^2);
+RquaredPLS = 1 - RSSPLS/TSS
 
 
 

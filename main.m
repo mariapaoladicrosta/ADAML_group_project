@@ -210,10 +210,10 @@ legend('Location', 'best');
 grid on;
 hold off;
 
-% Find common outliers
+% common outliers
 common_outliers = intersect(outliers_T2, outliers_SPEx);
 
-% Display common outliers
+
 disp('Common Outliers in T² and SPEx charts:');
 disp(common_outliers);
 
@@ -224,19 +224,18 @@ X_standardized = (X - mean(X)) ./ std(X);
 num_components = find((cumsum(explained)) / sum(explained) >= explained_variance_threshold, 1);
 
 for i = 1:length(common_outliers)
-    % Current outlier index
     outlier_index = common_outliers(i);
     
-    % Extract data for the current outlier
+    % data of current outlier
     outlier_data = X_standardized(outlier_index, :);
     
-    % Calculate T² contributions for the current outlier using t2contr
+    % T² contributions for the current outlier using t2contr
     T2_contributions = t2contr(outlier_data, coeff, latent, num_components);
     
-    % Calculate SPEx contributions for the current outlier using qcontr
+    % SPEx contributions for the current outlier using qcontr
     SPEx_contributions = qcontr(outlier_data, coeff, num_components);
     
-    % Plot T² contributions for the current outlier
+    % T² contributions for the current outlier
     figure;
     subplot(2, 1, 1);
     bar(T2_contributions);
@@ -245,7 +244,7 @@ for i = 1:length(common_outliers)
     ylabel('T² Contribution');
     grid on;
     
-    % Plot SPEx contributions for the current outlier
+    % SPEx contributions for the current outlier
     subplot(2, 1, 2);
     bar(SPEx_contributions);
     title(['SPEx Contributions for Outlier ', num2str(outlier_index)]);
@@ -306,13 +305,12 @@ model = CrossValidation_SlidingWindow(X_Cal, y_Cal, m, max_components);
  %%  Q2 Analysis
 [model, avg_positive_Q2] = Q2ValuesAnalysis(Calibration, model, m, max_components);
 
-% Plot the heatmap
+% heatmap of positive Q2
 figure;
 yvalues = {'22','24','28','32','35','40', '45'};
 xvalues = {'1', '2', '3', '4', '5', '6', '7', '8','9','10'};
 heatmap(xvalues, yvalues, avg_positive_Q2);
 
-% Customize labels
 title('Average Positive Q² Values Heatmap');
 xlabel('Number of Latent Variables (Components)');
 ylabel('Window Size (m)');
@@ -322,17 +320,14 @@ colorbar;
  %% Plot Q2 over time
 configurations = [24, 3; 32, 7]; 
 
-% Initialize figure for combined plot
 figure;
-% Loop through each configuration and plot on the same figure
 for k = 1:size(configurations, 1)
-    % Get window size and number of latent variables for the current configuration
+
     m = configurations(k, 1);
     j = configurations(k, 2);
 
     Q2_values = model(m).ncomp(j).Q2;
     
-    % plot Q2 over segments for this latent variable
     subplot(1,2,k)
     plot(Q2_values, '-o');
     title(['Q2 over segments for m = ' num2str(m) ', with LVs = ' num2str(j)]);
@@ -345,11 +340,8 @@ end
 %% Residuals over time
 configurations = [24, 3; 32, 7]; 
 
-% Initialize figure for combined plot
 figure;
-% Loop through each configuration and plot on the same figure
 for k = 1:size(configurations, 1)
-    % Get window size and number of latent variables for the current configuration
     m = configurations(k, 1);
     j = configurations(k, 2);
     
@@ -363,28 +355,27 @@ for k = 1:size(configurations, 1)
 end
 
 %% Negative Q2 analysis
-% Retrieve dates for each configuration
+% dates for each configuration
 dates_1 = model(24).ncomp(3).negative_Q2.Dates;
 dates_2 = model(32).ncomp(7).negative_Q2.Dates;
 
-% Find common dates between the two configurations
+% common dates between the two configurations
 common_dates = intersect(dates_1, dates_2);
 
-% Display the common dates
 disp('Common dates between the two configurations:');
 disp(common_dates);
 
-% Extract month and weekday information
+% month and weekday information
 months = month(common_dates); % Month as a number (1 to 12)
 weekdays = weekday(common_dates); % Weekday as a number (1 = Sunday, 7 = Saturday)
 
-% Define the selected months (April to August)
+% months (April to August)
 selected_months = 4:8;
 
-% Initialize matrix for occurrences by weekday and selected months
+
 occurrences_by_weekday_month = zeros(7, length(selected_months));
 
-% Fill matrix with counts for each day of the week within selected months
+% counts for each day of the week within selected months
 for m_idx = 1:length(selected_months)
     month_num = selected_months(m_idx);
     for d = 1:7
@@ -392,10 +383,8 @@ for m_idx = 1:length(selected_months)
     end
 end
 
-% Plot occurrences by month and weekday separately
-figure;
 
-% Plot occurrences by month
+figure;
 subplot(2, 1, 1);
 month_counts = histcounts(months, 1:13); % Count occurrences by month
 bar(1:12, month_counts, 'FaceColor', [0.2, 0.6, 0.8]);
@@ -406,7 +395,7 @@ ylabel('Occurrences');
 title('Occurrences of Common Dates by Month');
 grid on;
 
-% Plot occurrences by weekday (April to August)
+
 subplot(2, 1, 2);
 bar(occurrences_by_weekday_month, 'stacked');
 colormap(jet(length(selected_months))); % Set color map for differentiation
@@ -419,23 +408,21 @@ legend({'April', 'May', 'June', 'July', 'August'}, 'Location', 'best');
 grid on;
 
 %% beta over time
-% Loop through configurations
+
 figure;
 for i = 1:size(configurations, 1)
     m_value = configurations(i, 1);
     lv = configurations(i, 2);
 
-    % Determine the number of segments and initialize coefficients matrix
     num_segments = length(model(m_value).ncomp(lv).segment);
     num_vars = length(model(m_value).ncomp(lv).segment(1).B);
     coeff = zeros(num_vars, num_segments);
 
-    % Extract coefficients for each segment
     for k = 1:num_segments
         coeff(:, k) = model(m_value).ncomp(lv).segment(k).B;
     end
 
-    % Plot coefficients heatmap, limited to max_segments
+
     subplot(1,2,i)
     heatmap(coeff(:, 1:200));
     title(sprintf('PLS Coefficients for Window Size %d, %d Latent Variables', m_value, lv));
@@ -446,18 +433,16 @@ end
 
 %% Avg beta
 
-% Define configurations to process
-X_varNames = Calibration.Properties.VariableNames(3:end);  % Variable names for predictors
+X_varNames = Calibration.Properties.VariableNames(3:end); 
 
 figure;
-% Loop through configurations and plot variable importance
+
 for i = 1:size(configurations, 1)
     m_value = configurations(i, 1);
     lv = configurations(i, 2);
 
     varImp = mean(abs(model(m_value).ncomp(lv).B));
     
-    % Plot bar chart of variable importance
     subplot(2,1,i)
     bar(varImp(2:end));  % Exclude intercept (if applicable)
     set(gca, 'XTick', 1:numel(X_varNames), 'XTickLabel', X_varNames);
@@ -481,7 +466,6 @@ RquaredPLS = 1 - RSSPLS/TSS
 X_varNames = Calibration.Properties.VariableNames(3:end);
 VIP = computeVIP(XLoadings, yScore, 3, TSS);
 
-% Optional: Plot VIP scores for visualization
 figure;
 bar(VIP);
 xlabel('Predictor Variables');
@@ -491,30 +475,28 @@ title('Variable Importance in Projection (VIP) Scores');
 grid on;
 
 %%
-% Specify the columns to use
+% select only the columns with high VIP
 high_VIP_variables = find(VIP > 2500);
 
-% Extract only the selected columns from X_Cal_scaled and X_test_scaled
 X_Cal_reduced = X_Cal_scaled(:, high_VIP_variables);
 X_test_reduced = X_test_scaled(:, high_VIP_variables);
 
-% Run PLS regression with the reduced feature set
-numComponents = 4; % Adjust if needed
+
+numComponents = 4; 
 [XLoadings, yLoadings, XScore, yScore, betaPLS, PLSVar] = plsregress(X_Cal_reduced, y_Cal_centered, numComponents);
 
-% Predict on the test set using the recalibrated model
+% prediction with recalibrated model
 yfitPLS = [ones(height(X_test_reduced), 1), X_test_reduced] * betaPLS;
 
-% Calculate R² for the recalibrated model
+% R² for the recalibrated model
 TSS = sum((y_test_centered - mean(y_test_centered)).^2);
 RSSPLS = sum((y_test_centered - yfitPLS).^2);
 RquaredPLS = 1 - RSSPLS / TSS;
 
-% Display results
 disp('Recalibrated R²:');
 disp(RquaredPLS);
 
-%%
+%% betas analysis
 X_varNames = Calibration.Properties.VariableNames(2+high_VIP_variables);
 
 figure;
@@ -536,5 +518,5 @@ grid on;
 %%
 high_residuals_idx = find(residualsPLS > 2);
 
-% Retrieve the dates corresponding to these high residuals
+% dates corresponding to these high residuals
 dates_high_residuals = Test{high_residuals_idx,1};

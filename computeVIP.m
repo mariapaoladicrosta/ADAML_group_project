@@ -10,16 +10,14 @@ function VIP = computeVIP(XLoadings, yScore, numComponents, TSS)
     % Output:
     %   - VIP: Vector of VIP scores for each predictor
 
-    % Number of predictors
     numPredictors = size(XLoadings, 1);
     
-    % Calculate the sum of squares for each component in yScore
+    % sum of squares for each component in yScore
     SSY = sum(yScore(:, 1:numComponents).^2, 1);
     
-    % Initialize the VIP vector
     VIP = zeros(numPredictors, 1);
 
-    % Loop through each predictor to calculate its VIP score
+    % loop through each predictor to calculate its VIP score
     for j = 1:numPredictors
         VIP(j) = sqrt(numPredictors * sum((XLoadings(j, 1:numComponents).^2 .* SSY) / TSS));
     end
